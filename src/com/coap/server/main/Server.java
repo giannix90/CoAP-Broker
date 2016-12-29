@@ -11,9 +11,11 @@ import java.util.Iterator;
 
 import org.eclipse.californium.core.CoapResource;
 import org.eclipse.californium.core.CoapServer;
+import org.eclipse.californium.core.coap.CoAP.ResponseCode;
+import org.eclipse.californium.core.coap.Response;
 import org.eclipse.californium.core.server.resources.CoapExchange;
 import org.eclipse.californium.core.server.resources.Resource;
-
+import com.coap.server.main.BrokerUtility;
 /**
  * The Class CoAPServer Brokers.
  * @author Gianni Pollina
@@ -50,7 +52,7 @@ public class Server extends CoapServer {
     	/*Constructor*/
 
         // provide an instance of a resource
-        add(new PublishResource("ps","Radice").add(new PublishResource("Temp","Temperratura")));
+        add(new PublishResource("ps","Radice","","","",false).add(new PublishResource("Temp","30 C","temperature-c","sensor","40",true)).add(new PublishResource("ligth","30 lux","ligth-lux","sensor","40",true)));
     }
 
     /**
@@ -62,7 +64,7 @@ public class Server extends CoapServer {
         /**
          * Instantiates a new publish resource.
          */
-        public PublishResource(String ri,String title) {
+        public PublishResource(String ri,String title,String rt,String if1,String ct,boolean obs) {
         	
         	/*This is a resource example*/
         	
@@ -71,10 +73,14 @@ public class Server extends CoapServer {
             
             // set display name
             getAttributes().setTitle(title);
-            getAttributes().setAttribute("rt", "temperature");
-            getAttributes().setAttribute("if", "sensor");
-            getAttributes().setAttribute("ct", "40");
-            getAttributes().setObservable();
+            if(rt.length()>0)
+            	getAttributes().setAttribute("rt", rt);
+            if(if1.length()>0)
+            	getAttributes().setAttribute("if", if1);
+            if(ct.length()>0)
+            	getAttributes().setAttribute("ct", ct);
+            if(obs)
+            	getAttributes().setObservable();
         }
 
         
@@ -106,7 +112,7 @@ public class Server extends CoapServer {
         @Override
         public void handleGET(CoapExchange exchange) {
         	
-        	/*Implement get responce*/
+        	/*Implement DISCOVER*/
         	
         	System.out.println("GET request"
         			+exchange.getRequestOptions().getURIPathString());
@@ -115,7 +121,9 @@ public class Server extends CoapServer {
         	System.out.println("Query count : "
         			+exchange.getRequestOptions().getURIQueryCount());
         	
-        	for(int i=0;i<exchange.getRequestOptions().getURIQueryCount();i++){
+        	int nQueries=exchange.getRequestOptions().getURIQueryCount();
+        	
+        	for(int i=0;i<nQueries;i++){
 	        
         		//return the list of queries
 	        	System.out.println("Query-"+i+" : "
@@ -127,15 +135,26 @@ public class Server extends CoapServer {
         	
         	Iterator<Resource> i=listOfChild.iterator();
         	
+        	String res=null;
+        	String str=null;
+        	StringBuilder builder=new StringBuilder();//this is a builder used to concatenate multiple string
+        	
+        	//scroll all child resources founded
         	while(i.hasNext()){
         	
         		Resource r=i.next();
-        		exchange.respond("<"+r.getPath()+r.getName()+">;"+"rt=\""+r.getAttributes().getAttributeValues("rt").get(0)+"\";"
-        				+"if=\""+r.getAttributes().getAttributeValues("if").get(0)+"\";"
-        				+"ct=\""+r.getAttributes().getAttributeValues("ct").get(0)+"\";"
-        				);            
+
+        		res=BrokerUtility.buildResponce(r,nQueries,exchange.getRequestOptions().getURIQueries());
+        		
+        		if(res!=null){
+        			builder.append(res).append("\n");
+        		}
         		
         	}
+
+        	str=builder.toString();
+    		exchange.respond(str==null?ResponseCode.NOT_FOUND:ResponseCode.CONTENT,str==null?"":str);            
+    		
         }
         
         
