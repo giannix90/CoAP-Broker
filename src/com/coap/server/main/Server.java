@@ -1,24 +1,25 @@
 package com.coap.server.main;
 
+import java.net.SocketException;
 /*******************************************************************************
  *
  * Version 0.1
  * 
  ******************************************************************************/
-
-import java.net.SocketException;
+import java.util.Collection;
+import java.util.Iterator;
 
 import org.eclipse.californium.core.CoapResource;
 import org.eclipse.californium.core.CoapServer;
 import org.eclipse.californium.core.server.resources.CoapExchange;
+import org.eclipse.californium.core.server.resources.Resource;
 
 /**
  * The Class CoAPServer Brokers.
  * @author Gianni Pollina
  */
 public class Server extends CoapServer {
-
-
+	
     /**
      * The main method.
      *
@@ -31,13 +32,15 @@ public class Server extends CoapServer {
             // create new instance server of this class
             Server server = new Server();
             server.start();
+           
             
         } catch (SocketException e) {
         	//Handle the error
             System.err.println("Failed to initialize server: " + e.getMessage());
         }
     }
-
+    
+   
     /**
      * Instantiates a new CoAP server.
      *
@@ -47,7 +50,7 @@ public class Server extends CoapServer {
     	/*Constructor*/
 
         // provide an instance of a resource
-        add(new PublishResource());
+        add(new PublishResource("ps","Radice").add(new PublishResource("Temp","Temperratura")));
     }
 
     /**
@@ -59,18 +62,36 @@ public class Server extends CoapServer {
         /**
          * Instantiates a new publish resource.
          */
-        public PublishResource() {
+        public PublishResource(String ri,String title) {
+        	
+        	/*This is a resource example*/
         	
             // set resource identifier
-            super("temperatura");
+            super(ri);
             
             // set display name
-            getAttributes().setTitle("Risorsa Temperatura");
+            getAttributes().setTitle(title);
+            getAttributes().setAttribute("rt", "temperature");
+            getAttributes().setAttribute("if", "sensor");
+            getAttributes().setAttribute("ct", "40");
+            getAttributes().setObservable();
         }
 
+        
+        /**
+         * The Class CoapExchange represents an exchange of a CoAP request and response
+         * and provides a user-friendly API to subclasses of {@link CoapResource} for
+         * responding to requests.
+         */
+        
+        /**
+         * When a request arrives, the request will be handled by the resource's executor.
+         */
+        
        /* 
 		*	This is the listener for the POST request (Is called automatically when an incoming POST req arrives)
-        */     
+        */
+        @Override
         public void handlePOST(CoapExchange exchange) {  
         	
         	System.out.println("POST request received");
@@ -82,11 +103,53 @@ public class Server extends CoapServer {
         /* 
          * Listener for GET request
          */
+        @Override
         public void handleGET(CoapExchange exchange) {
         	
-        	System.out.println("POST request received");
+        	/*Implement get responce*/
         	
-            exchange.respond("GET_REQUEST_SUCCESS");            
+        	System.out.println("GET request"
+        			+exchange.getRequestOptions().getURIPathString());
+        	
+        	//return the number of queries
+        	System.out.println("Query count : "
+        			+exchange.getRequestOptions().getURIQueryCount());
+        	
+        	for(int i=0;i<exchange.getRequestOptions().getURIQueryCount();i++){
+	        
+        		//return the list of queries
+	        	System.out.println("Query-"+i+" : "
+	        			+exchange.getRequestOptions().getURIQueries().get(i));
+	        }
+        	
+        	//I want the list of child
+        	Collection<Resource> listOfChild=getChildren();
+        	
+        	Iterator<Resource> i=listOfChild.iterator();
+        	
+        	while(i.hasNext()){
+        	
+        		Resource r=i.next();
+        		exchange.respond("<"+r.getPath()+r.getName()+">;"+"rt=\""+r.getAttributes().getAttributeValues("rt").get(0)+"\";"
+        				+"if=\""+r.getAttributes().getAttributeValues("if").get(0)+"\";"
+        				+"ct=\""+r.getAttributes().getAttributeValues("ct").get(0)+"\";"
+        				);            
+        		
+        	}
+        }
+        
+        
+        public void handlePUT(CoapExchange exchange) {
+        	 
+        	exchange.respond("PUT");
+        	changed(); // notify all observers
+        }
+        	  
+        
+        public void handleDELETE(CoapExchange exchange) {
+        	
+        	delete();
+        	exchange.respond("DELETE");
         }
     }
 
