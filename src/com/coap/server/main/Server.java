@@ -64,6 +64,14 @@ public class Server extends CoapServer {
 
         private int mValue=30; //This is the value of the resource
         
+        public void setValue(int value){
+        	this.mValue=value;
+        }
+        
+        public int getValue(){
+        	return(this.mValue);
+        }
+        
         /**
          * Instantiates a new publish resource.
          */
@@ -174,9 +182,9 @@ public class Server extends CoapServer {
 	        }
         	else{
         		/**-----Implement READ*----*/
-        		String value=new String(getAttributes().getAttributeValues("value").get(0));
+        		String value=new String(Integer.toString(mValue));
         			
-
+        		System.out.println(exchange.getRequestOptions().getContentFormat());
         		if(exchange.getRequestOptions().getContentFormat()!=40){
         				//I accept only the content type 40 ==> application/link-format
         				exchange.respond(ResponseCode.UNSUPPORTED_CONTENT_FORMAT,"");
@@ -193,19 +201,20 @@ public class Server extends CoapServer {
         
         public void handlePUT(CoapExchange exchange) {
         	
-        	//This is a test value
-        	mValue=new Random().nextInt();
-        	//exchange.respond(ResponseCode.CHANGED);
+        	System.out.println("PUT request"
+        			+exchange.getRequestOptions().getURIPathString());
         	
-        		changed(); // notify all observers
-     
+        	setValue(Integer.parseInt((exchange.getRequestText().trim())));
+        	exchange.respond(ResponseCode.CHANGED);
+        	changed(); // notify all observers
+        	
         }
         	  
         
         public void handleDELETE(CoapExchange exchange) {
         	
         	delete();
-        	exchange.respond("DELETE");
+        	exchange.respond(ResponseCode.DELETED,"DELETE");
         }
     }
 
