@@ -10,7 +10,6 @@ import java.net.SocketException;
  ******************************************************************************/
 import java.util.Collection;
 import java.util.Iterator;
-import java.util.Random;
 
 import org.eclipse.californium.core.CoapResource;
 import org.eclipse.californium.core.CoapServer;
@@ -20,7 +19,7 @@ import org.eclipse.californium.core.server.resources.Resource;
 import com.coap.server.main.BrokerUtility;
 /**
  * The Class CoAPServer Brokers.
- * @author Gianni Pollina
+ * 
  */
 public class Server extends CoapServer {
 	
@@ -113,10 +112,52 @@ public class Server extends CoapServer {
         @Override
         public void handlePOST(CoapExchange exchange) {  
         	
-
-        	if(exchange.getRequestOptions().hasObserve())
-        	exchange.respond(Integer.toString(getObserverCount()));        
-        }
+        		String measurement = exchange.getRequestText().trim();
+	        	
+        		//This are the index of ; and = respectively
+	        	int iend= measurement.indexOf(";");
+	        	int iend2= measurement.indexOf("=");
+	        	
+	        	if(iend != -1 && iend2!=-1){
+		        
+	        		//This case is for bad request => when not appear ; and =
+	        		
+		        	String nameOfResource = measurement.substring(0, iend);
+		        	
+		        	//I take the list of child resources
+		        	Collection<Resource> listOfChild=getChildren();
+		        	Iterator<Resource> i=listOfChild.iterator();
+		        	
+		        	while(i.hasNext()){
+			        	
+		        		//I control if the resource already exist
+		        		Resource r=i.next();
+		        		
+		        		if(r.getName().equals(nameOfResource)){
+		        				exchange.respond(ResponseCode.FORBIDDEN);
+		        				return;
+		        		}
+		        	}
+		        	
+		        	
+		        	
+		        	String option1= measurement.substring(iend2+1,iend2+3);
+		        	if(!option1.equals("40")){
+		        		exchange.respond(ResponseCode.NOT_ACCEPTABLE);
+		        		return;
+		        	}
+		        		
+		        	
+		        	
+		        	add(new PublishResource(nameOfResource,nameOfResource,nameOfResource+"_sensor","sensor",option1,true));
+		        	exchange.respond(ResponseCode.CREATED, "Location: "+exchange.getRequestOptions().getURIPathString()+"/"+option1);
+		        
+	        	}
+	        	else{
+	        		//This is the case of malformed request
+	        		exchange.respond(ResponseCode.BAD_REQUEST);
+	        	}
+        	}
         
         /* 
          * Listener for GET request
