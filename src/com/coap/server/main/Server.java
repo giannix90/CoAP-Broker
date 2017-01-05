@@ -61,13 +61,13 @@ public class Server extends CoapServer {
      */
     class PublishResource extends CoapResource {
 
-        private int mValue=30; //This is the value of the resource
+        private double mValue=30; //This is the value of the resource
         
-        public void setValue(int value){
+        public void setValue(double value){
         	this.mValue=value;
         }
         
-        public int getValue(){
+        public double getValue(){
         	return(this.mValue);
         }
         
@@ -112,51 +112,63 @@ public class Server extends CoapServer {
         @Override
         public void handlePOST(CoapExchange exchange) {  
         	
+        	if(!BrokerUtility.checkForBadQuery(exchange.getRequestPayload().toString()) || !BrokerUtility.checkForBadRequest(exchange.getRequestOptions().getURIPathString())) {
+        		exchange.respond(ResponseCode.BAD_REQUEST);
+        		return;
+        	}
+        	
         		String measurement = exchange.getRequestText().trim();
 	        	
-        		//This are the index of ; and = respectively
-	        	int iend= measurement.indexOf(";");
-	        	int iend2= measurement.indexOf("=");
-	        	
-	        	if(iend != -1 && iend2!=-1){
-		        
-	        		//This case is for bad request => when not appear ; and =
+        		//I handle the mutual exclusion in this critical section
+        		synchronized(this){
 	        		
-		        	String nameOfResource = measurement.substring(0, iend);
+	        		//This are the index of ; and = respectively
+		        	int iend= measurement.indexOf(";");
+		        	int iend2= measurement.indexOf("=");
 		        	
-		        	//I take the list of child resources
-		        	Collection<Resource> listOfChild=getChildren();
-		        	Iterator<Resource> i=listOfChild.iterator();
-		        	
-		        	while(i.hasNext()){
+		        	if(iend != -1 && iend2!=-1){
+			        
+		        		//This case is for bad request => when not appear ; and =
+		        		
+			        	String nameOfResource = measurement.substring(1, iend-1);
 			        	
-		        		//I control if the resource already exist
-		        		Resource r=i.next();
-		        		
-		        		if(r.getName().equals(nameOfResource)){
-		        				exchange.respond(ResponseCode.FORBIDDEN);
-		        				return;
-		        		}
+			        	//I take the list of child resources
+			        	Collection<Resource> listOfChild=getChildren();
+			        	Iterator<Resource> i=listOfChild.iterator();
+			        	
+			        	while(i.hasNext()){
+				        	
+			        		//I control if the resource already exist
+			        		Resource r=i.next();
+			        		
+			        		if(r.getName().equals(nameOfResource)){
+			        				exchange.respond(ResponseCode.FORBIDDEN);
+			        				return;
+			        		}
+			        	}
+			        	
+			        	
+			        	
+			        	String ct= BrokerUtility.getCt(measurement);//Ct is mandatory
+			        	String iff=BrokerUtility.getIf(measurement);
+			        	String rt=BrokerUtility.getRt(measurement);
+			        	
+			        	if(!ct.equals("40") || ct == null){
+			        		exchange.respond(ResponseCode.NOT_ACCEPTABLE);
+			        		return;
+			        	}
+			        		
+			        	
+			        	
+			        	add(new PublishResource(nameOfResource,nameOfResource,rt==null?"":rt,iff==null?"":iff,ct,true));
+			        	exchange.respond(ResponseCode.CREATED, "Location: "+exchange.getRequestOptions().getURIPathString()+"/"+nameOfResource);
+			        
 		        	}
-		        	
-		        	
-		        	
-		        	String option1= measurement.substring(iend2+1,iend2+3);
-		        	if(!option1.equals("40")){
-		        		exchange.respond(ResponseCode.NOT_ACCEPTABLE);
-		        		return;
+		        	else{
+		        		//This is the case of malformed request
+		        		exchange.respond(ResponseCode.BAD_REQUEST);
 		        	}
-		        		
-		        	
-		        	
-		        	add(new PublishResource(nameOfResource,nameOfResource,nameOfResource+"_sensor","sensor",option1,true));
-		        	exchange.respond(ResponseCode.CREATED, "Location: "+exchange.getRequestOptions().getURIPathString()+"/"+option1);
-		        
-	        	}
-	        	else{
-	        		//This is the case of malformed request
-	        		exchange.respond(ResponseCode.BAD_REQUEST);
-	        	}
+        		}
         	}
         
         /* 
@@ -169,17 +181,29 @@ public class Server extends CoapServer {
         	 * N.B. the observing (and then Subscribe-Unsubscribe) is automatically handled by Californium
         	 * */
         	
+        	if(!BrokerUtility.checkForBadQuery(exchange.getRequestOptions().getURIQueryString()) || !BrokerUtility.checkForBadRequest(exchange.getRequestOptions().getURIPathString())) {
+        		exchange.respond(ResponseCode.BAD_REQUEST);
+        		return;
+        	}
+        		
+        	
         	System.out.println("GET request"
         			+exchange.getRequestOptions().getURIPathString());
         	
         	String path=exchange.getRequestOptions().getURIPathString();
         	
-        	if(path.equals("ps/")||path.equals("ps")){
+        	//I want the list of child
+        	Collection<Resource> listOfChild=getChildren();
+        	
+        	Iterator<Resource> i=listOfChild.iterator();
+        	
+        	
+        	if(path.equals("ps/")||path.equals("ps") || i.hasNext()){
 
             	/**-----Implement DISCOVER------**/
             	
         		
-        		/*This is the DISCOVER because the path request has form ps or ps/*/
+        		/*This is the DISCOVER because the path request has form ps or ps/ or have childs*/
         		
         		//return the number of queries
 	        	System.out.println("Query count : "
@@ -187,17 +211,14 @@ public class Server extends CoapServer {
 	        	
 	        	int nQueries=exchange.getRequestOptions().getURIQueryCount();
 	        	
-	        	for(int i=0;i<nQueries;i++){
+	        	for(int ii=0;ii<nQueries;ii++){
 		        
 	        		//return the list of queries
-		        	System.out.println("Query-"+i+" : "
-		        			+exchange.getRequestOptions().getURIQueries().get(i));
+		        	System.out.println("Query-"+ii+" : "
+		        			+exchange.getRequestOptions().getURIQueries().get(ii));
 		        }
 	        	
-	        	//I want the list of child
-	        	Collection<Resource> listOfChild=getChildren();
-	        	
-	        	Iterator<Resource> i=listOfChild.iterator();
+	     
 	        	
 	        	String res=null;
 	        	String str=null;
@@ -223,7 +244,7 @@ public class Server extends CoapServer {
 	        }
         	else{
         		/**-----Implement READ*----*/
-        		String value=new String(Integer.toString(mValue));
+        		String value=new String(Double.toString(mValue));
         			
         		System.out.println(exchange.getRequestOptions().getContentFormat());
         		if(exchange.getRequestOptions().getContentFormat()!=40){
@@ -234,7 +255,7 @@ public class Server extends CoapServer {
 	        		//N.B. In case of not found resource Californium automatically set the Code 4.04
 	        		
 	        		//If the value is not included i return REQUEST_ENTITY_INCOMPLETE code
-	        		exchange.respond(value.length()==0?ResponseCode.REQUEST_ENTITY_INCOMPLETE:ResponseCode.CONTENT,Integer.toString(mValue));
+	        		exchange.respond(value.length()==0?ResponseCode.REQUEST_ENTITY_INCOMPLETE:ResponseCode.CONTENT,Double.toString(mValue));
         		}
         	}
         }
@@ -242,10 +263,15 @@ public class Server extends CoapServer {
         
         public void handlePUT(CoapExchange exchange) {
         	
+        	if(!BrokerUtility.checkForBadPut(exchange.getRequestPayload().toString())) {
+        		exchange.respond(ResponseCode.BAD_REQUEST);
+        		return;
+        	}
+        	
         	System.out.println("PUT request"
         			+exchange.getRequestOptions().getURIPathString());
         	
-        	setValue(Integer.parseInt((exchange.getRequestText().trim())));
+        	setValue(Double.parseDouble((exchange.getRequestText().trim())));
         	exchange.respond(ResponseCode.CHANGED);
         	changed(); // notify all observers
         	
@@ -255,7 +281,7 @@ public class Server extends CoapServer {
         public void handleDELETE(CoapExchange exchange) {
         	
         	delete();
-        	exchange.respond(ResponseCode.DELETED,"DELETE");
+        	exchange.respond(ResponseCode.DELETED);
         }
     }
 
