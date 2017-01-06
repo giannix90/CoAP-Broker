@@ -3,13 +3,17 @@ package com.coap.server.main;
 import java.net.SocketException;
 /*******************************************************************************
  *
- * Version 0.1
+ * Version 1.1
  * 
  * This Coap Broker Accept only the request with content format 40 (application/link-format) 
  * 
  ******************************************************************************/
 import java.util.Collection;
+import java.util.Date;
 import java.util.Iterator;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 import org.eclipse.californium.core.CoapResource;
 import org.eclipse.californium.core.CoapServer;
@@ -17,13 +21,36 @@ import org.eclipse.californium.core.coap.CoAP.ResponseCode;
 import org.eclipse.californium.core.server.resources.CoapExchange;
 import org.eclipse.californium.core.server.resources.Resource;
 import com.coap.server.main.BrokerUtility;
+import com.coap.server.main.AgeList;
+import com.coap.server.main.AgeList.Age;;
 /**
  * The Class CoAPServer Brokers.
  * 
  */
 public class Server extends CoapServer {
 	
-    /**
+	private AgeList mAgeList=new AgeList();
+	
+	private final ScheduledExecutorService cleaner=Executors.newScheduledThreadPool(1); //Is used for delete old resource
+   
+	@Override
+	public synchronized void start() {
+		//Viene lanciato il thread cleaner ogni secondo e cancella le vecchie risorse
+         cleaner.scheduleAtFixedRate(new Runnable(){
+             public void run(){
+                 //System.out.println("Cleaner Running...");
+                 //Date d=new Date();//prelevo data corrente in millisecondi
+                 
+                 mAgeList.checkForDelete();//prelevo tempo corrente e elimino dati vecchi >10min
+             }
+            }, 1, 3,TimeUnit.SECONDS); //scheduleAtFixedRate(Runnable command,long initialDelay,long period,TimeUnit unit)
+         
+         System.out.println("Servlet Inizializzato");
+         
+         super.start();
+	 }
+	
+	/**
      * The main method.
      *
      * @param args the arguments
@@ -51,6 +78,7 @@ public class Server extends CoapServer {
      */
     public Server() throws SocketException {
     	/*Constructor*/
+    
 
         // provide an instance of a resource
         add(new PublishResource("ps","Radice","","","",false).add(new PublishResource("Temp","Temp","temperature-c","sensor","40",true)).add(new PublishResource("ligth","ligth","ligth-lux","sensor","40",true)));
@@ -118,6 +146,9 @@ public class Server extends CoapServer {
         	}
         	
         		String measurement = exchange.getRequestText().trim();
+        		
+        		
+        		
 	        	
         		//I handle the mutual exclusion in this critical section
         		synchronized(this){
@@ -158,11 +189,22 @@ public class Server extends CoapServer {
 			        		return;
 			        	}
 			        		
+			        	Resource newResource=new PublishResource(nameOfResource,nameOfResource,rt==null?"":rt,iff==null?"":iff,ct,true);
 			        	
 			        	
-			        	add(new PublishResource(nameOfResource,nameOfResource,rt==null?"":rt,iff==null?"":iff,ct,true));
+			        	add(newResource);
+			        	
+			        	
+			        	//set and handle the Max Age if requested in the option 
+		        		if(exchange.getRequestOptions().hasMaxAge()){
+		        			System.out.println("Inserisco Max Age: "+exchange.getRequestOptions().getMaxAge().intValue());
+		        			mAgeList.insert(new Date().getTime(),exchange.getRequestOptions().getMaxAge().intValue() ,(CoapResource) newResource);
+		        			
+		        		}
+		        		
 			        	exchange.respond(ResponseCode.CREATED, "Location: "+exchange.getRequestOptions().getURIPathString()+"/"+nameOfResource);
 			        
+			        	
 		        	}
 		        	else{
 		        		//This is the case of malformed request
@@ -254,6 +296,9 @@ public class Server extends CoapServer {
         		else{
 	        		//N.B. In case of not found resource Californium automatically set the Code 4.04
 	        		
+        			if(mAgeList.hasResource(this) && mAgeList.getRemainingTime(this)>0){
+        				exchange.setMaxAge(mAgeList.getRemainingTime(this));
+        			}
 	        		//If the value is not included i return REQUEST_ENTITY_INCOMPLETE code
 	        		exchange.respond(value.length()==0?ResponseCode.REQUEST_ENTITY_INCOMPLETE:ResponseCode.CONTENT,Double.toString(mValue));
         		}
@@ -272,6 +317,18 @@ public class Server extends CoapServer {
         			+exchange.getRequestOptions().getURIPathString());
         	
         	setValue(Double.parseDouble((exchange.getRequestText().trim())));
+        	
+        	
+        	//set and handle the Max Age if requested in the option 
+    		if(exchange.getRequestOptions().hasMaxAge()){
+    			System.out.println("Inserisco Max Age: "+exchange.getRequestOptions().getMaxAge().intValue());
+    			mAgeList.insert(new Date().getTime(),exchange.getRequestOptions().getMaxAge().intValue() ,(CoapResource) this);
+    			
+    		}else{
+    			mAgeList.delete(this); //if Max age not specified i remove from the list
+    		}
+    		
+    		//exchange.setMaxAge(mAgeList.getRemainingTime(this));
         	exchange.respond(ResponseCode.CHANGED);
         	changed(); // notify all observers
         	
@@ -280,6 +337,7 @@ public class Server extends CoapServer {
         
         public void handleDELETE(CoapExchange exchange) {
         	
+        	//System.out.println("del addr"+(this));
         	delete();
         	exchange.respond(ResponseCode.DELETED);
         }
