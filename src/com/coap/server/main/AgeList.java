@@ -8,7 +8,6 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import org.eclipse.californium.core.CoapResource;
 
-import com.coap.server.main.AgeList.Age;
 
 public class AgeList {
 

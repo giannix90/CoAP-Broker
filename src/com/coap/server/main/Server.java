@@ -22,7 +22,6 @@ import org.eclipse.californium.core.server.resources.CoapExchange;
 import org.eclipse.californium.core.server.resources.Resource;
 import com.coap.server.main.BrokerUtility;
 import com.coap.server.main.AgeList;
-import com.coap.server.main.AgeList.Age;;
 /**
  * The Class CoAPServer Brokers.
  * 
@@ -43,7 +42,7 @@ public class Server extends CoapServer {
                  
                  mAgeList.checkForDelete();//prelevo tempo corrente e elimino dati vecchi >10min
              }
-            }, 1, 3,TimeUnit.SECONDS); //scheduleAtFixedRate(Runnable command,long initialDelay,long period,TimeUnit unit)
+            }, 1, 1,TimeUnit.SECONDS); //scheduleAtFixedRate(Runnable command,long initialDelay,long period,TimeUnit unit)
          
          System.out.println("Servlet Inizializzato");
          
